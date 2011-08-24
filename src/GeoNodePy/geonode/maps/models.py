@@ -1597,7 +1597,7 @@ class Map(models.Model, PermissionLevelMixin):
         configs = [l.source_config() for l in layers]
         configs.insert(0, {
             "ptype":"gxp_gnsource",
-            "url": "/geoserver/wms",
+            "url": settings.GEOSERVER_BASE_URL + "wms",
             "restUrl": "/gs/rest"})
 
         i = 0
