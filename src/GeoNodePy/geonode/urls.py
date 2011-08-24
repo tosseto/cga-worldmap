@@ -2,6 +2,7 @@ from django.conf.urls.defaults import *
 from django.conf import settings
 from staticfiles.urls import staticfiles_urlpatterns
 from geonode.sitemap import LayerSitemap, MapSitemap
+from geonode.proxy.urls import urlpatterns as proxy_urlpatterns
 
 
 # Uncomment the next two lines to enable the admin:
@@ -9,7 +10,8 @@ from django.contrib import admin
 admin.autodiscover()
 
 js_info_dict = {
-    'packages': ('geonode.maps',),
+    'domain': 'djangojs',
+    'packages': ('geonode',)
 }
 
 sitemaps = {
@@ -25,8 +27,6 @@ urlpatterns = patterns('',
     url(r'^lang\.js$', 'django.views.generic.simple.direct_to_template',
                {'template': 'lang.js', 'mimetype': 'text/javascript'}, 'lang'),
     (r'^maps/', include('geonode.maps.urls')),
-    (r'^proxy/', 'geonode.proxy.views.proxy'),
-    (r'^geoserver/','geonode.proxy.views.geoserver'),
     (r'^picasa/','geonode.proxy.views.picasa'),
     (r'^youtube/','geonode.proxy.views.youtube'),
     (r'^hglpoint/','geonode.proxy.views.hglpoints'),
@@ -62,8 +62,10 @@ urlpatterns = patterns('',
     (r'^(?P<site>\w+)/edit$', 'geonode.maps.views.official_site_controller'),
     (r'^accounts/', include('registration.urls')),
     (r'^profiles/', include('profiles.urls')),
-    (r'^sitemap\.xml$', 'django.contrib.sitemaps.views.sitemap', {'sitemaps': sitemaps})
+    (r'^sitemap\.xml$', 'django.contrib.sitemaps.views.sitemap', {'sitemaps': sitemaps}),
     )
+
+urlpatterns += proxy_urlpatterns
 
 # Extra static file endpoint for development use
 if settings.SERVE_MEDIA:

@@ -14,7 +14,13 @@ distribution.
 
 .. note::
 
+<<<<<<< HEAD
     Disabling SELinux http://www.centos.org/docs/5/html/5.2/Deployment_Guide/sec-sel-enable-disable.html
+=======
+    SELinux is known to cause issues with the Apache proxy configuration used by GeoNode. Altering its configuration is beyond the scope of this document.
+    
+    Instructions for disabling SELinux http://www.centos.org/docs/5/html/5.2/Deployment_Guide/sec-sel-enable-disable.html
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
 
 The stack used is:
 
@@ -40,7 +46,7 @@ You can unpack it like::
   GeoNode-1.0.1/geonetwork.war
   GeoNode-1.0.1/pavement.py
   GeoNode-1.0.1/geonode-webapp.pybundle
-  GeoNode-1.0.1/geoserver-geonode-dev.war
+  GeoNode-1.0.1/geoserver.war
   GeoNode-1.0.1/bootstrap.py
   GeoNode-1.0.1/deploy-libs.txt
   GeoNode-1.0.1/deploy.ini.ex
@@ -50,27 +56,37 @@ Install Dependencies
 
 1. Add Additional Repositories
 
-     The Python interpreter in the CentOS repositories does not support GeoNode;
-     instead use the python26 package from the `EPEL
-     <http://fedoraproject.org/wiki/EPEL>`_ project.  Follow the instructions from
-     the wiki to activate the EPEL repository::
+   .. note::
 
-     $ # The command below is an example, please adjust based on your exact version of CentOS
-     $ su -c 'rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm'
+    The commands below are examples, please adjust based on your exact version of CentOS
 
-     Enable the `ELGIS testing repository
-     <http://wiki.osgeo.org/wiki/Enterprise_Linux_GIS>`_::
+   The Python interpreter in the CentOS repositories does not support GeoNode;
+   instead use the python26 package from the `EPEL
+   <http://fedoraproject.org/wiki/EPEL>`_ project.  Follow the instructions from
+   the wiki to activate the EPEL repository::
+     
+   $ su -c 'rpm -Uvh http://download.fedora.redhat.com/pub/epel/5/i386/epel-release-5-4.noarch.rpm'
 
-     $ # The command below is an example, please adjust based on your exact version of CentOS
-     $ su -c 'rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm'
+   Enable the `ELGIS testing repository
+   <http://wiki.osgeo.org/wiki/Enterprise_Linux_GIS>`_::
+
+   $ su -c 'rpm -Uvh http://elgis.argeo.org/repos/5/elgis-release-5-5_0.noarch.rpm'
 
 2. Install Java Runtime
 
+<<<<<<< HEAD
      You will need a Java Runtime Environment (JRE).  We recommend following
      the `Oracle installation instructions
      <http://www.oracle.com/technetwork/java/javase/downloads/index.html>`_
      While other JRE versions will work, Oracle's is recommended for performance
      reasons.
+=======
+   You will need a Java Runtime Environment (JRE).  We recommend following
+   the `Oracle installation instructions
+   <http://www.oracle.com/technetwork/java/javase/downloads/index.html>`_
+   While other JRE versions will work, Oracle's is recommended for performance
+   reasons.  
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
 
 3. Install Dependencies with yum::
 
@@ -500,6 +516,7 @@ Tomcat Servlet container was already installed with yum in previous step
    Edit the file :file:`/etc/sysconfig/tomcat5` and add the following.::
 
     JAVA_OPTS="-Xmx1024m -XX:MaxPermSize=256m -XX:CompileCommand=exclude,net/sf/saxon/event/ReceivingContentHandler.startElement"
+<<<<<<< HEAD
 
     .. note::
 
@@ -509,6 +526,18 @@ Tomcat Servlet container was already installed with yum in previous step
         "permgen", needed to run geonetwork/geoserver.
       * ``-XX:CompileCommand=...`` is a workaround for a JVM bug that affects
         GeoNetwork; see http://trac.osgeo.org/geonetwork/ticket/301
+=======
+  
+   .. note::
+ 
+     The Java options used are as follows: 
+     
+     * ``-Xmx1024m`` tells Java to use 1GB of RAM instead of the default value
+
+     * ``-XX:MaxPermSize=256M`` increase the amount of space used for "permgen", needed to run geonetwork/geoserver.
+
+     * ``-XX:CompileCommand=...`` is a workaround for a JVM bug that affect GeoNetwork; see http://trac.osgeo.org/geonetwork/ticket/301
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
 
 2. Set tomcat to start on boot::
 
@@ -528,8 +557,8 @@ Deploying GeoNetwork
      $ mv GeoNode-1.0.1/geonetwork.war /var/lib/tomcat5/webapps/
 
 2. The GeoNetwork administrative account will be using the default password.  You
-   should navigate to `the GeoNetwork web interface
-   <http://localhost:8080/geonetwork/>` and change the password for this account,
+   should navigate to the `GeoNetwork web interface
+   <http://localhost:8080/geonetwork/>`_ and change the password for this account,
    taking note of the new password for later use. (Log in with the username
    ``admin`` and password ``admin``, then use the "Administration" link in the
    top navigation menu to change the password.)
@@ -543,7 +572,7 @@ Deploying GeoNetwork
 .. note::
 
     The GeoNetwork configuration, including metadata documents and password
-    configuration, is stored inside of [tomcat]/webapps/geonetwork/ .  This
+    configuration, is stored inside of ``[tomcat]/webapps/geonetwork/`` .  This
     directory can be copied between machines to quickly reproduce a
     configuration with a given administrative password across multiple
     machines.
@@ -551,16 +580,20 @@ Deploying GeoNetwork
 Deploying GeoServer
 -------------------
 
-1. Move :file:`geoserver-geonode-dev.war` from the GeoNode release archive into
+1. Move :file:`geoserver.war` from the GeoNode release archive into
    the Tomcat deployment directory::
 
-     $ mv GeoNode-1.0.1/geoserver-geonode-dev.war /var/lib/tomcat5/webapps/
+     $ mv GeoNode-1.0.1/geoserver.war /var/lib/tomcat5/webapps/
 
 2. GeoServer uses the Django web application to authenticate users.  By
    default, it will look for GeoNode at http://localhost:8000/ but we will be
    running the Django application on http://localhost:80/ so we have to
    configure GeoServer to look at that URL.  To do so, edit
+<<<<<<< HEAD
    :file:`/var/lib/tomcat5/webapps/geoserver-geonode-dev/WEB-INF/web.xml`
+=======
+   :file:`/var/lib/tomcat5/webapps/geoserver/WEB-INF/web.xml` 
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
    and add a context-parameter::
 
      <context-param>
@@ -576,9 +609,15 @@ Deploying GeoServer
 
 3. Move the GeoServer "data directory" outside of the servlet container to
    avoid having it overwritten on later upgrades. Edit the file
+<<<<<<< HEAD
    :file`/var/lib/tomcat5/webapps/geoserver-geonode-dev/WEB-INF/web.xml`
    by uncommenting the block below and setting the param-value to
    /opt/geoserver_data::
+=======
+   :file:`/var/lib/tomcat5/webapps/geoserver/WEB-INF/web.xml`
+   by uncommenting the block below and setting the param-value to 
+   ``/opt/geoserver_data``::
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
 
      <context-param>
         <param-name>GEOSERVER_DATA_DIR</param-name>
@@ -587,8 +626,13 @@ Deploying GeoServer
 
 4. GeoServer requires a particular directory structure in data directories, so
    also copy the template datadir from the tomcat webapps directory::
+<<<<<<< HEAD
 
      $ cp -rp /var/lib/tomcat5/webapps/geoserver-geonode-dev/data/* /opt/geoserver_data/.
+=======
+   
+     $ cp -rp /var/lib/tomcat5/webapps/geoserver/data/* /opt/geoserver_data/.
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
      $ chown tomcat. /opt/geoserver_data/ -R
 
 4. After modifying ``web.xml`` you will need to restart Tomcat for changes to
@@ -597,8 +641,13 @@ Deploying GeoServer
      $ service tomcat5 restart
 
 5. You should now be able to visit the GeoServer web interface at
+<<<<<<< HEAD
    http://localhost:8080/geoserver-geonode-dev/ .
 
+=======
+   http://localhost:8080/geoserver/ . 
+   
+>>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
 .. note::
 
      GeoServer is configured to use the Django database for authentication,
@@ -636,8 +685,8 @@ its configuration are necessary.
 
      ProxyPreserveHost On
 
-     ProxyPass /geoserver-geonode-dev http://localhost:8080/geoserver-geonode-dev
-     ProxyPassReverse /geoserver-geonode-dev http://localhost:8080/geoserver-geonode-dev
+     ProxyPass /geoserver http://localhost:8080/geoserver
+     ProxyPassReverse /geoserver http://localhost:8080/geoserver
      ProxyPass /geonetwork http://localhost:8080/geonetwork
      ProxyPassReverse /geonetwork http://localhost:8080/geonetwork
 
@@ -653,7 +702,7 @@ its configuration are necessary.
    services are working properly::
 
      http://localhost/geonetwork/
-     http://localhost/geoserver-geonode-dev/
+     http://localhost/geoserver/
 
 Installing the GeoNode Django Application
 -----------------------------------------
@@ -707,7 +756,7 @@ Installing the GeoNode Django Application
      SECRET_KEY = ''
 
      # The FULLY QUALIFIED url to the GeoServer instance for this GeoNode.
-     GEOSERVER_BASE_URL = SITEURL + "geoserver-geonode-dev/"
+     GEOSERVER_BASE_URL = SITEURL + "geoserver/"
 
      # The FULLY QUALIFIED url to the GeoNetwork instance for this GeoNode
      GEONETWORK_BASE_URL = SITEURL + "geonetwork/"
@@ -790,7 +839,7 @@ Prepare the Django database
 
      host   all         all                               md5
 
-     Then restart postgres in order to pick up the changes::
+   Then restart postgres in order to pick up the changes::
 
      $ service postgresql restart
 
