@@ -62,7 +62,7 @@ LANGUAGES = (
     ('en', 'English'),
     ('es', 'Español'),
     ('it', 'Italiano'),
-    ('fr', 'François'),
+    ('fr', 'Français'),
 )
 
 SITE_ID = 1
@@ -302,7 +302,7 @@ INSTALLED_APPS = (
     'geonode.proxy',
     'geonode.accountforms',
     'geonode.profileforms',
-    #'debug_toolbar',
+    'geonode'
 )
 
 def get_user_url(u):

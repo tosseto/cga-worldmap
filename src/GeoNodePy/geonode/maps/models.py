@@ -944,7 +944,7 @@ class Layer(models.Model, PermissionLevelMixin):
                     'request': 'GetFeature',
                     'typename': self.typename,
                     'outputFormat': mime,
-                    'format_options': 'charset:UTF-8' #TODO: make this a settings property?
+                    'format_options': 'charset:UTF-8'
                 })
             types = [
                 ("zip", _("Zipped Shapefile"), "SHAPE-ZIP"),
@@ -962,7 +962,7 @@ class Layer(models.Model, PermissionLevelMixin):
                         "service": "WCS",
                         "version": "1.0.0",
                         "request": "DescribeCoverage",
-                        "coverages": self.typename
+                        "coverage": self.typename
                     })
                 response, content = client.request(description_url)
                 doc = parse(StringIO(content))
@@ -989,6 +989,7 @@ class Layer(models.Model, PermissionLevelMixin):
             except Exception, e:
                 # if something is wrong with WCS we probably don't want to link
                 # to it anyway
+                # TODO: This is a bad idea to eat errors like this.
                 pass
 
         def wms_link(mime):
@@ -1329,7 +1330,8 @@ class Layer(models.Model, PermissionLevelMixin):
             gn.logout()
         if self.poc and self.poc.user:
             self.publishing.attribution = str(self.poc.user)
-            self.publishing.attribution_link = self.poc.user.get_absolute_url()
+            profile = Contact.objects.get(user=self.poc.user)
+            self.publishing.attribution_link = settings.SITEURL[:-1] + profile.get_absolute_url()
             Layer.objects.gs_catalog.save(self.publishing)
 
     def  _populate_from_gs(self):
@@ -1486,7 +1488,7 @@ class Map(models.Model, PermissionLevelMixin):
     A display name suitable for search results and page headers
     """
 
-    abstract = models.CharField(_('Abstract'),max_length=200)
+    abstract = models.TextField(_('Abstract'))
     """
     A longer description of the themes in the map.
     """
@@ -1662,7 +1664,11 @@ class Map(models.Model, PermissionLevelMixin):
             return results
 
         configs = [l.source_config() for l in layers]
-        configs.append({"ptype":"gxp_gnsource", "url": settings.GEOSERVER_BASE_URL + "wms"})
+        #configs.append({"ptype":"gxp_gnsource", "url": settings.GEOSERVER_BASE_URL + "wms"})
+        configs.insert(0, {
+            "ptype":"gxp_gnsource",
+            "url": "/geoserver/wms",
+            "restUrl": "/gs/rest"})
 
         i = 0
         for source in uniqify(configs):
@@ -2005,10 +2011,13 @@ class MapLayer(models.Model):
         try:
             cfg = simplejson.loads(self.source_params)
         except:
-            cfg = dict(ptype = "gxp_gnsource")
 
-        if self.ows_url:
-            cfg["url"] = self.ows_url
+            #cfg = dict(ptype = "gxp_gnsource")
+
+            cfg = dict(ptype="gxp_gnsource", restUrl="/gs/rest")
+
+        if self.ows_url: cfg["url"] = self.ows_url
+
         return cfg
 
     def layer_config(self, user):

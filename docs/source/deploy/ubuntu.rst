@@ -27,17 +27,18 @@ Release archives of geonode are produced from the geonode sources using::
 
   paver make_release # from the root of a working dir
 
-If you don't have a checkout, you can get the latest release from
-http://dev.geonode.org/release/ 
+You can also get the latest release from http://dev.geonode.org/release/ or
+the `GeoNode project wiki <http://dev.geonode.org/trac/>`_ .
+You can unpack it like::
 
-  $ tar xvzf GeoNode-1.0.1.tar.gz
-  GeoNode-1.0.1/geonetwork.war
-  GeoNode-1.0.1/pavement.py
-  GeoNode-1.0.1/geonode-webapp.pybundle
-  GeoNode-1.0.1/geoserver-geonode-dev.war
-  GeoNode-1.0.1/bootstrap.py
-  GeoNode-1.0.1/deploy-libs.txt
-  GeoNode-1.0.1/deploy.ini.ex
+   $ tar xvzf GeoNode-1.0.1.tar.gz
+   GeoNode-1.0.1/geonetwork.war
+   GeoNode-1.0.1/pavement.py
+   GeoNode-1.0.1/geonode-webapp.pybundle
+   GeoNode-1.0.1/geoserver.war
+   GeoNode-1.0.1/bootstrap.py
+   GeoNode-1.0.1/deploy-libs.txt
+   GeoNode-1.0.1/deploy.ini.ex
 
 Runtimes
 --------
@@ -49,6 +50,7 @@ Python::
 Java:
 
 For Sun/Oracle Java (recommended for better rendering performance)::
+
   # vi /etc/apt/sources.list
   # <enable partners repository>
   # apt-get update
@@ -61,16 +63,27 @@ For OpenJDK (simpler install)::
 Servlet Container Installation
 ------------------------------
 
-1. Install tomcat from ubuntu packages
+1. Install tomcat from ubuntu packages::
 
    # apt-get install tomcat6
 
-2. Update JAVA_OPTS
+2. Update JAVA_OPTS::
 
    # vi /etc/init.d/tomcat6
    # export JAVA_OPTS="-Xmx1024m -XX:MaxPermSize=256m -XX:CompileCommand=exclude,net/sf/saxon/event/ReceivingContentHandler.startElement"
 
-3. Restart tomcat
+   .. note::
+
+     The Java options used are as follows:
+
+     * ``-Xmx1024m`` tells Java to use 1GB of RAM instead of the default value
+
+     * ``-XX:MaxPermSize=256M`` increase the amount of space used for "permgen", needed to run geonetwork/geoserver.
+
+     * ``-XX:CompileCommand=...`` is a workaround for a JVM bug that affect GeoNetwork; see http://trac.osgeo.org/geonetwork/ticket/301
+
+
+3. Restart tomcat::
    
    # sudo /etc/init.d/tomcat6 restart
 
@@ -84,23 +97,23 @@ Deploying GeoNetwork
 
 .. note:: 
 
-     The GeoNetwork username and password defaults to admin/admin and
-     should be changed, but they cannot be changed while the server is not running.
+     The GeoNetwork username and password both default to ``admin`` and
+     should be changed, but they cannot be changed unless the server is running.
      See the instructions below for starting up Tomcat.
 
 Deploying GeoServer
 -------------------
 
-1. Move :file:`geoserver-geonode-dev.war` from the GeoNode release archive into
+1. Move :file:`geoserver.war` from the GeoNode release archive into
    the Tomcat deployment directory::
 
-     # sudo cp geoserver-geonode-dev.war /var/lib/tomcat6/webapps/
+     # sudo cp geoserver.war /var/lib/tomcat6/webapps/
 
 2. GeoServer uses the Django web application to authenticate users.  By
    default, it will look for GeoNode at http://localhost:8000/ but we will be
    running the Django application on http://localhost:80/ so we have to
    configure GeoServer to look at that URL.  To do so, edit
-   :file:`/var/lib/tomcat6/webapps/geoserver-geonode-dev/WEB-INF/web.xml` 
+   :file:`/var/lib/tomcat6/webapps/geoserver/WEB-INF/web.xml` 
    and add a context-parameter::
 
      <context-param>
@@ -119,10 +132,10 @@ Deploying GeoServer
    GeoServer requires a particular directory structure in data directories, so
    also copy the template datadir from the tomcat webapps directory::
 
-     # cp -R /var/lib/tomcat6/webapps/geoserver-geonode-dev/data/ /opt/geoserver_data
+     # cp -R /var/lib/tomcat6/webapps/geoserver/data/ /opt/geoserver_data
      # chown tomcat6 -R /opt/geoserver_data/
 
-4. Restart tomcat
+4. Restart tomcat::
 
    # sudo /etc/init.d/tomcat6 restart
 
@@ -134,13 +147,13 @@ Changes after Tomcat is Running
      # /etc/init.d/tomcat6 start
 
 2. You should now be able to visit the GeoServer web interface at
-   http://localhost:8080/geoserver-geonode-dev/ .  GeoServer is configured to
+   http://localhost:8080/geoserver/ .  GeoServer is configured to
    use the Django database for authentication, so you won't be able to log in
    to the GeoServer console until Django is up and running.
 
 3. The GeoNetwork administrative account will be using the default password.  You
    should navigate to `the GeoNetwork web interface
-   <http://localhost:8080/geonetwork/>` and change the password for this account,
+   <http://localhost:8080/geonetwork/>`_ and change the password for this account,
    taking note of the new password for later use. (Log in with the username
    ``admin`` and password ``admin``, then use the "Administration" link in the
    top navigation menu to change the password.)
@@ -154,7 +167,7 @@ Changes after Tomcat is Running
 .. note::
 
     The GeoNetwork configuration, including metadata documents and password
-    configuration, is stored inside of [tomcat]/webapps/geonetwork/ .  This
+    configuration, is stored inside of ``[tomcat]/webapps/geonetwork/`` .  This
     directory can be copied between machines to quickly reproduce a
     configuration with a given administrative password across multiple
     machines.
@@ -183,8 +196,8 @@ Install GeoNode Django Site
 
      # apt-get install gcc libjpeg-dev libpng-dev python-gdal python-psycopg2 libproj-dev proj-bin proj-data
 
-2. Create new directories in /var/www/ for the geonode static files, uploads,
-   and python scripts (``htdocs``,``htdocs/media``, ``htdocs/uploads``,``wsgi/geonode``,
+2. Create new directories in ``/var/www/`` for the geonode static files, uploads,
+   and python scripts (``htdocs``, ``htdocs/media``, ``htdocs/uploads``, ``wsgi/geonode``,
    respectively)::
 
     # mkdir -p /var/www/geonode/{htdocs,htdocs/media,wsgi/geonode/} 
@@ -236,7 +249,7 @@ Install GeoNode Django Site
      SECRET_KEY = '' 
 
      # The FULLY QUALIFIED url to the GeoServer instance for this GeoNode.
-     GEOSERVER_BASE_URL = SITEURL + "geoserver-geonode-dev/"
+     GEOSERVER_BASE_URL = SITEURL + "geoserver/"
 
      # The FULLY QUALIFIED url to the GeoNetwork instance for this GeoNode
      GEONETWORK_BASE_URL = SITEURL + "geonetwork/"
@@ -255,7 +268,7 @@ Install GeoNode Django Site
      ADMIN_MEDIA_PREFIX = ("/admin-media/")
 
 
-6. Place a wsgi launcher script in /var/www/geonode/wsgi/geonode.wsgi::
+6. Place a wsgi launcher script in ``/var/www/geonode/wsgi/geonode.wsgi``::
 
      import site, os
 
@@ -307,13 +320,13 @@ Install GeoNode Django Site
 
         ProxyPreserveHost On
 
-        ProxyPass /geoserver-geonode-dev http://localhost:8080/geoserver-geonode-dev
-        ProxyPassReverse /geoserver-geonode-dev http://localhost:8080/geoserver-geonode-dev
+        ProxyPass /geoserver http://localhost:8080/geoserver
+        ProxyPassReverse /geoserver http://localhost:8080/geoserver
         ProxyPass /geonetwork http://localhost:8080/geonetwork
         ProxyPassReverse /geonetwork http://localhost:8080/geonetwork
      </VirtualHost>
 
-9. Set the filesystem ownership to the Apache user for the geonode/ folder::
+9. Set the filesystem ownership to the Apache user for the ``geonode`` folder::
 
       # chown www-data -R /var/www/geonode/
 
@@ -336,3 +349,12 @@ Install GeoNode Django Site
     prompted for an admin username and account)::
 
       # /var/www/geonode/wsgi/geonode/bin/django-admin.py syncdb --settings=geonode.settings
+
+13. You should now be able to see the GeoNode site at http://localhost/
+
+
+.. note::
+
+ If you have problems uploading files, please enable the verbose logging
+ http://docs.geonode.org/1.0.1/logging.html
+
