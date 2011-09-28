@@ -772,6 +772,10 @@ class LayerManager(models.Manager):
                     "uuid": str(uuid.uuid4())
                 })
 
+                if not created and store.name != layer.store:
+                    layer.store = store.name
+                    layer.save()
+
                 ## Due to a bug in GeoNode versions prior to 1.0RC2, the data
                 ## in the database may not have a valid date_type set.  The
                 ## invalid values are expected to differ from the acceptable
@@ -790,7 +794,8 @@ class LayerManager(models.Manager):
                     layer._populate_from_gs()
 
                 layer.save()
-		if created:
+
+                if created:
                     layer.set_default_permissions()
 
                 #Create layer attributes if they don't already exist
