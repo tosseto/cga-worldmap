@@ -8,6 +8,8 @@ from django.conf import settings
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 import logging
+from geonode.maps.models import LayerStats
+
 
 logger = logging.getLogger("geonode.proxy.views")
 
@@ -64,6 +66,7 @@ def geoserver_rest_proxy(request, proxy_path, downstream_path):
 
     if request.method in ("POST", "PUT") and "CONTENT_TYPE" in request.META:
         headers["Content-Type"] = request.META["CONTENT_TYPE"]
+
     response, content = http.request(
         url, request.method,
         body=request.raw_post_data or None,
@@ -73,8 +76,6 @@ def geoserver_rest_proxy(request, proxy_path, downstream_path):
         content=content,
         status=response.status,
         mimetype=response.get("content-type", "text/plain"))
-
-
 
 def picasa(request):
     url = "http://picasaweb.google.com/data/feed/base/all?thumbsize=160c&"
@@ -94,17 +95,17 @@ def picasa(request):
     return HttpResponse(feed_response, mimetype="text/xml")
 
 def hglpoints (request):
-    #url = "http://dixon.hul.harvard.edu:8080/HGL/HGLGeoRSS?UserQuery="
-    url = "http://pynchon.hul.harvard.edu:8080/HGL/HGLGeoRSS?GeometryType=envelope"
-    #bbox = request.GET['BBOX'] if request.method == 'GET' else request.POST['BBOX']
+    url = "http://pynchon.hul.harvard.edu:8080/HGL/HGLGeoRSS?GeometryType=point"
     query = request.GET['Q'] if request.method == 'GET' else request.POST['Q']
+#    bbox = request.GET['BBOX'] if request.method == 'GET' else request.POST['BBOX']
 #    coords = bbox.split(",")
 #    coords[0] = -180 if float(coords[0]) <= -180 else coords[0]
 #    coords[2] = 180 if float(coords[2])  >= 180 else coords[2]
 #    coords[1] = coords[1] if float(coords[1]) > -90 else -90
 #    coords[3] = coords[3] if float(coords[3])  < 90 else 90
 #    newbbox = str(coords[0]) + ',' + str(coords[1]) + ',' + str(coords[2]) + ',' + str(coords[3])
-    url = url + "&UserQuery=" + query # + "&BBSearchOption=" + newbbox
+    url = url + "&UserQuery=" + query  #+ "&BBSearchOption=" + newbbox
+    logger.debug("HGL URL: %s", url)
     feed_response = urllib.urlopen(url).read()
     return HttpResponse(feed_response, mimetype="text/xml")
 
@@ -133,3 +134,21 @@ def youtube(request):
     feed_response = urllib.urlopen(url).read()
     return HttpResponse(feed_response, mimetype="text/xml")
 
+def download(request, service, layer):
+    layerstats,created = LayerStats.objects.get_or_create(layer=layer)
+    layerstats.downloads += 1
+    layerstats.save()
+
+    params = request.GET
+    #mimetype = params.get("outputFormat") if service == "wfs" else params.get("format")
+    
+    service=service.replace("_","/")
+    url = settings.GEOSERVER_BASE_URL + service + "?" + params.urlencode()
+    download_response = urllib.urlopen(url)
+    headers = download_response.info()
+    content_disposition = headers.get('Content-Disposition')
+    mimetype = headers.get('Content-Type')
+    content = download_response.read()
+    response = HttpResponse(content, mimetype = mimetype)
+    if content_disposition is not None:
+        response['Content-Disposition'] = content_disposition

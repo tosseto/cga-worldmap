@@ -4,7 +4,6 @@ from urllib import urlencode
 import logging
 import os
 
-logging.basicConfig(level = logging.DEBUG,format = '%(asctime)s %(levelname)s %(message)s',filename = 'geonode.log',filemode = 'a')
 
 _ = lambda x: x
 
@@ -14,6 +13,7 @@ SITEURL = "http://localhost:8000/"
 #TEMPLATE_DEBUG = DEBUG
 TEMPLATE_DEBUG = True
 DEFAULT_FROM_EMAIL="me@me.com"
+NO_REPLY_EMAIL = "do-not-reply@worldmap.harvard.edu"
 
 PROJECT_ROOT = os.path.abspath(os.path.dirname(__file__))
 
@@ -151,7 +151,11 @@ MIDDLEWARE_CLASSES = (
     'django.middleware.locale.LocaleMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    #'debug_toolbar.middleware.DebugToolbarMiddleware',
 )
+
+#This is only required for the Django Debug Toolbar
+INTERNAL_IPS = ('127.0.0.1',)
 
 # This isn't required for running the geonode site, but it when running sites that inherit the geonode.settings module.
 LOCALE_PATHS = (
@@ -347,6 +351,9 @@ DB_DATASTORE_PASSWORD = ''
 DB_DATASTORE_HOST = ''
 DB_DATASTORE_PORT = ''
 DB_DATASTORE_TYPE=''
+
+
+CACHE_BACKEND = 'dummy://'
 
 try:
     from local_settings import *

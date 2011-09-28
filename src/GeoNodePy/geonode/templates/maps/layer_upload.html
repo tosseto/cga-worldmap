@@ -164,6 +164,19 @@ Ext.onReady(function(){
         name: "permissions"
     });
 
+    var termsAgreeCheck = new Ext.form.Checkbox({
+        id: 'agreeCheck',
+        fieldLabel: 'I agree to the <a href="" onclick="javascript:showTOC();return false;">Terms and Conditions</a>',
+        handler: function(){
+                if (this.checked) {
+                        Ext.getCmp('uploadButton').enable();
+                } else
+                    Ext.getCmp('uploadButton').disable();
+        },
+        labelStyle: 'position:absolute;float:left;left:80px;width:200px',
+        labelSeparator : ''
+    });
+
     var fp = new Ext.FormPanel({
         renderTo: 'upload_form',
         fileUpload: true,
@@ -176,13 +189,14 @@ Ext.onReady(function(){
             anchor: '95%',
             msgTarget: 'side'
         },
-        items: [layer_title, map_id, base_file, dbf_file, shx_file, prj_file, encoding, sld_file, abstractField, permissionsField, {
+        items: [layer_title, map_id, base_file, dbf_file, shx_file, prj_file, encoding, sld_file, abstractField, termsAgreeCheck, permissionsField, {
             xtype: "hidden",
             name: "csrfmiddlewaretoken",
             value: "{{ csrf_token }}"
         }],
         buttons: [{
             text: gettext('Upload'),
+            disabled: true,
             handler: function(){
                 if (fp.getForm().isValid()) {
                     fp.getForm().submit({
@@ -283,6 +297,37 @@ Ext.onReady(function(){
     permissionsEditor.fireEvent("updated", permissionsEditor);
 
 });
+
+    var showTOC = function() {
+        var TOCPanel = new Ext.Panel({
+            id: 'worldmap_mapshare_panel',
+            title: 'Share Map',
+            header: false,
+            autoLoad: {url: '/maps/upload_terms'},
+            autoScroll: true
+        });
+
+        var TOCWindow = new Ext.Window({
+            title: "WorldMap Terms and Conditions",
+            closeAction: 'destroy',
+            layout: 'fit',
+            width: 400,
+            height:400,
+            items: [TOCPanel],
+            modal: true,
+            autoScroll: false,
+            bodyStyle: 'background-color:#FFF',
+            buttons: [
+                {
+                    text: 'Close',
+                    handler: function() {TOCWindow.close();}
+                }
+            ]
+        });
+
+        TOCWindow.show();
+
+    };
 {% endautoescape %}
 </script>
 
@@ -312,6 +357,22 @@ Ext.onReady(function(){
 </p>
 </div>
 
+Ext.Ajax.on('requestcomplete', function(connection, response, options) {
+if (options.form) {
+    if (!response.status || response.status >= 400)
+    {
+                            Ext.Msg.show({
+                                title: gettext("Error"),
+                                msg: response.responseText.contains("413") ? gettext("Upload is too large") : response.responseText,
+                                minWidth: 200,
+                                modal: true,
+                                icon: Ext.Msg.ERROR,
+                                buttons: Ext.Msg.OK
+                            });
+    }
+
+}
+});
 
 
 {% endblock %}

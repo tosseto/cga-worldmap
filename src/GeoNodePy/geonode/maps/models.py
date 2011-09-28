@@ -24,6 +24,7 @@ from xml.etree.ElementTree import parse, XML
 import re
 import logging
 from geonode.maps.encode import num_encode
+from django.core.cache import cache
 
 logger = logging.getLogger("geonode.maps.models")
 from gs_helpers import cascading_delete
@@ -683,6 +684,7 @@ class LayerManager(models.Manager):
         # Make sure to logout after you have finished using it.
         return self.geonetwork
 
+
     def admin_contact(self):
         # this assumes there is at least one superuser
         superusers = User.objects.filter(is_superuser=True).order_by('id')
@@ -698,6 +700,59 @@ class LayerManager(models.Manager):
 
     def default_metadata_author(self):
         return self.admin_contact()
+
+    def import_existing_layer(self, resource_name):
+        #Like slurp but for just one particular layer
+        cat = self.gs_catalog
+        gn = self.gn_catalog
+        resource = cat.get_resource(resource_name)
+        if resource:
+            store = resource.store
+            workspace = store.workspace
+            layer, created = self.get_or_create(name=resource.name, defaults = {
+                    "workspace": workspace.name,
+                    "store": store.name,
+                    "storeType": store.resource_type,
+                    "typename": "%s:%s" % (workspace.name, resource.name),
+                    "title": resource.title or 'No title provided',
+                    "abstract": resource.abstract or 'No abstract provided',
+                    "uuid": str(uuid.uuid4())
+            })
+            ## Due to a bug in GeoNode versions prior to 1.0RC2, the data
+            ## in the database may not have a valid date_type set.  The
+            ## invalid values are expected to differ from the acceptable
+            ## values only by case, so try to convert, then fallback to a
+            ## default.
+            ##
+            ## We should probably drop this adjustment in 1.1. --David Winslow
+            if layer.date_type not in Layer.VALID_DATE_TYPES:
+                candidate = lower(layer.date_type)
+                if candidate in Layer.VALID_DATE_TYPES:
+                    layer.date_type = candidate
+                else:
+                    layer.date_type = Layer.VALID_DATE_TYPES[0]
+
+            if layer.bbox is None:
+                layer._populate_from_gs()
+
+            layer.save()
+
+            if created:
+                layer.set_default_permissions()
+                #Create layer attributes if they don't already exist
+                try:
+                    if layer.attribute_names is not None:
+                        for field, ftype in layer.attribute_names.iteritems():
+                            if field is not None:
+                                la, created = LayerAttribute.objects.get_or_create(layer=layer, attribute=field, attribute_type=ftype, defaults={'attribute_label' : field, 'searchable': ftype == "xsd:string" })
+                                if created:
+                                    logger.debug("Created [%s] attribute for [%s]", field, layer.name)
+                except Exception, e:
+                    logger.debug("Could not create attributes for [%s] : [%s]", layer.name, str(e))
+                finally:
+                    pass
+        # Doing a logout since we know we don't need this object anymore.
+        gn.logout()
 
     def slurp(self):
         cat = self.gs_catalog
@@ -737,20 +792,22 @@ class LayerManager(models.Manager):
                 layer.save()
 		if created:
                     layer.set_default_permissions()
+
                 #Create layer attributes if they don't already exist
                 try:
                     if layer.attribute_names is not None:
+                        iter = 1;
                         for field, ftype in layer.attribute_names.iteritems():
-                            if field is not None:
+                            logger.debug("%s: %s", field, ftype)
+                            if field is not None and  ftype.find("gml:") != 0:
                                 la, created = LayerAttribute.objects.get_or_create(layer=layer, attribute=field, attribute_type=ftype, defaults={'attribute_label' : field, 'searchable': ftype == "xsd:string" })
                                 if created:
                                     logger.debug("Created [%s] attribute for [%s]", field, layer.name)
+                                    la.display_order = iter
+                                    la.save()
+                                    iter += 1
                 except Exception, e:
-                    logger.debug("Could not create attributes for [%s] : [%s]", layer.name, str(e))
-
-
-
-
+                    logger.error("Could not create attributes for [%s] : [%s]", layer.name, str(e))
             finally:
                 pass
         # Doing a logout since we know we don't need this object anymore.
@@ -832,7 +889,7 @@ class Layer(models.Model, PermissionLevelMixin):
     temporal_extent_start = models.DateField(_('temporal extent start'), blank=True, null=True)
     temporal_extent_end = models.DateField(_('temporal extent end'), blank=True, null=True)
     geographic_bounding_box = models.TextField(_('geographic bounding box'))
-    supplemental_information = models.TextField(_('supplemental information'), blank=True, null=True)
+    supplemental_information = models.TextField(_('supplemental information'), blank=True, null=True, default='')
 
     # Section 6
     distribution_url = models.TextField(_('distribution URL'), blank=True, null=True)
@@ -881,13 +938,13 @@ class Layer(models.Model, PermissionLevelMixin):
 
         if self.resource.resource_type == "featureType":
             def wfs_link(mime):
-                return settings.GEOSERVER_BASE_URL + "wfs?" + urllib.urlencode({
+                return "/download/wfs/" + str(self.id) + "?" + urllib.urlencode({
                     'service': 'WFS',
                     'version':'1.0.0',
                     'request': 'GetFeature',
                     'typename': self.typename,
                     'outputFormat': mime,
-                    'format_options': 'charset:UTF-8' #TODO: make this a settings property?
+                    'format_options': 'charset:UTF-8'
                 })
             types = [
                 ("zip", _("Zipped Shapefile"), "SHAPE-ZIP"),
@@ -901,7 +958,7 @@ class Layer(models.Model, PermissionLevelMixin):
         elif self.resource.resource_type == "coverage":
             try:
                 client = httplib2.Http()
-                description_url = settings.GEOSERVER_BASE_URL + "wcs?" + urllib.urlencode({
+                description_url = "/download/wcs/" + str(self.id) + "?" + urllib.urlencode({
                         "service": "WCS",
                         "version": "1.0.0",
                         "request": "DescribeCoverage",
@@ -915,7 +972,7 @@ class Layer(models.Model, PermissionLevelMixin):
                 w, h = [int(h) - int(l) for (h, l) in zip(high, low)]
 
                 def wcs_link(mime):
-                    return settings.GEOSERVER_BASE_URL + "wcs?" + urllib.urlencode({
+                    return "/download/wcs/" + str(self.id) + "?" + urllib.urlencode({
                         "service": "WCS",
                         "version": "1.0.0",
                         "request": "GetCoverage",
@@ -933,11 +990,10 @@ class Layer(models.Model, PermissionLevelMixin):
                 # if something is wrong with WCS we probably don't want to link
                 # to it anyway
                 # TODO: This is a bad idea to eat errors like this.
-                pass 
-
+                pass
 
         def wms_link(mime):
-            return settings.GEOSERVER_BASE_URL + "wms?" + urllib.urlencode({
+            return "/download/wms/" + str(self.id) + "?"  + urllib.urlencode({
                 'service': 'WMS',
                 'request': 'GetMap',
                 'layers': self.typename,
@@ -956,12 +1012,12 @@ class Layer(models.Model, PermissionLevelMixin):
 
         links.extend((ext, name, wms_link(mime)) for ext, name, mime in types)
 
-        kml_reflector_link_download = settings.GEOSERVER_BASE_URL + "wms/kml?" + urllib.urlencode({
+        kml_reflector_link_download ="/download/wms_kml/" + str(self.id) + "?"  + urllib.urlencode({
             'layers': self.typename,
             'mode': "download"
         })
 
-        kml_reflector_link_view = settings.GEOSERVER_BASE_URL + "wms/kml?" + urllib.urlencode({
+        kml_reflector_link_view = "/download/wms_kml/" + str(self.id) + "?" + urllib.urlencode({
             'layers': self.typename,
             'mode': "refresh"
         })
@@ -1023,14 +1079,17 @@ class Layer(models.Model, PermissionLevelMixin):
         #FIXME: Add more checks, for example making sure the title, keywords and description
         # are the same in every database.
 
-    def searchFields(self):
-        searchable_fields = []
-        scount = 0
-        for la in self.attribute_set.filter(attribute__iregex=r'^((?!geom)(?!gid)(?!oid)(?!object[\w]*id).)*$').order_by('display_order'):
-            searchable_fields.append( {"attribute": la.attribute, "label": la.attribute_label, "searchable": str(la.searchable)})
-            if la.searchable:
-                scount+=1
-        return searchable_fields
+    def layer_attributes(self):
+        attribute_fields = cache.get('layer_searchfields_' + self.typename)
+        if attribute_fields is None:
+            logger.debug("Create searchfields for %s", self.typename)
+            attribute_fields = []
+            attributes = self.attribute_set.filter(visible=True).order_by('display_order')
+            for la in attributes:
+                attribute_fields.append( {"id": la.attribute, "header": la.attribute_label, "searchable" : la.searchable})
+            cache.add('layer_searchfields_' + self.typename, attribute_fields)
+            logger.debug("cache created for layer %s", self.typename)
+        return attribute_fields
 
     def maps(self):
         """Return a list of all the maps that use this layer"""
@@ -1349,12 +1408,14 @@ class Layer(models.Model, PermissionLevelMixin):
     LEVEL_ADMIN = 'layer_admin'
 
     def set_default_permissions(self):
+        logger.info("Set group permissions")
         self.set_gen_level(ANONYMOUS_USERS, self.LEVEL_READ)
         self.set_gen_level(AUTHENTICATED_USERS, self.LEVEL_READ)
         self.set_gen_level(CUSTOM_GROUP_USERS, self.LEVEL_READ)
 
         # remove specific user permissions
         current_perms =  self.get_all_level_info()
+
         for username in current_perms['users'].keys():
             user = User.objects.get(username=username)
             self.set_user_level(user, self.LEVEL_NONE)
@@ -1373,7 +1434,6 @@ class Layer(models.Model, PermissionLevelMixin):
         :method:`geonode.maps.models.Map.viewer_json` for an example of
         generating a full map configuration.
         """
-
         cfg = dict()
         cfg['name'] = self.typename
         cfg['title'] =self.title
@@ -1387,12 +1447,11 @@ class Layer(models.Model, PermissionLevelMixin):
         cfg['bbox'] = simplejson.loads(self.bbox)
         cfg['llbbox'] = simplejson.loads(self.llbbox)
         cfg['queryable'] = (self.storeType == 'dataStore')
-        cfg['searchfields'] = self.searchFields()
-        cfg['disabled'] = user and not user.has_perm('maps.view_layer', obj=self)
+        cfg['attributes'] = self.layer_attributes()
+        cfg['disabled'] =  not user.has_perm('maps.view_layer', obj=self)
         cfg['visibility'] = True
         cfg['abstract'] = self.abstract
         cfg['styles'] = ''
-        logger.debug("layer config for [%s] is [%s]", self.name, str(cfg))
         return cfg
 
 class LayerAttribute(models.Model):
@@ -1401,6 +1460,7 @@ class LayerAttribute(models.Model):
     attribute_label = models.CharField(_('Attribute Label'), max_length=255, blank=False, null=True, unique=False)
     attribute_type = models.CharField(_('Attribute Type'), max_length=50, blank=False, null=False, default='xsd:string', unique=False)
     searchable = models.BooleanField(_('Searchable?'), default=False)
+    visible = models.BooleanField(_('Visible?'), default=True)
     display_order = models.IntegerField(_('Display Order'), default=1)
 
     created_dttm = models.DateTimeField(auto_now_add=True)
@@ -1464,12 +1524,12 @@ class Map(models.Model, PermissionLevelMixin):
     """
 
 
-    created_dttm = models.DateTimeField(auto_now_add=True)
+    created_dttm = models.DateTimeField(_("Date Created"), auto_now_add=True)
     """
     The date/time the map was created.
     """
 
-    last_modified = models.DateTimeField(auto_now_add=True)
+    last_modified = models.DateTimeField(_("Date Last Modified"),auto_now_add=True)
     """
     The last time the map was modified.
     """
@@ -1516,12 +1576,18 @@ class Map(models.Model, PermissionLevelMixin):
         return (self.center_x, self.center_y)
 
     @property
-    def layers(self):
-        layers = MapLayer.objects.filter(map=self.id)
+    def maplayers(self):
+        layers = cache.get('maplayerset_' + str(self.id))
+        if layers is None:
+            logger.debug('maplayerset cache was None')
+            layers = MapLayer.objects.filter(map=self.id)
+            cache.add('maplayerset_' + str(self.id), layers)
         return  [layer for layer in layers]
+
 
     @property
     def snapshots(self):
+        logger.debug('+_+_+_+_+_+_+_GETTING SNAPSHOTS')
         snapshots = MapSnapshot.objects.exclude(user=None).filter(map=self.id)
         return [snapshot for snapshot in snapshots]
 
@@ -1530,7 +1596,7 @@ class Map(models.Model, PermissionLevelMixin):
         return True
 
     def json(self, layer_filter):
-        map_layers = MapLayer.objects.filter(map=self.id)
+        map_layers = self.maplayers
         layers = []
         for map_layer in map_layers:
             if map_layer.local():
@@ -1576,7 +1642,10 @@ class Map(models.Model, PermissionLevelMixin):
         configuration. These are not persisted; if you want to add layers you
         should use ``.layer_set.create()``.
         """
-        layers = list(self.layer_set.all()) + list(added_layers) #implicitly sorted by stack_order
+        logger.debug("++++++++++++++++++CALLING viewer_json+++++++++++++++++++++")
+
+        layers = list(self.maplayers) + list(added_layers) #implicitly sorted by stack_order
+        
         sejumps = self.jump_set.all()
         server_lookup = {}
         sources = dict()
@@ -1595,9 +1664,10 @@ class Map(models.Model, PermissionLevelMixin):
             return results
 
         configs = [l.source_config() for l in layers]
+        #configs.append({"ptype":"gxp_gnsource", "url": settings.GEOSERVER_BASE_URL + "wms"})
         configs.insert(0, {
             "ptype":"gxp_gnsource",
-            "url": settings.GEOSERVER_BASE_URL + "wms",
+            "url": "/geoserver/wms",
             "restUrl": "/gs/rest"})
 
         i = 0
@@ -1612,6 +1682,7 @@ class Map(models.Model, PermissionLevelMixin):
             return None
 
         def layer_config(l, user):
+            logger.debug("_________CALLING viewer_json.layer_config for %s", l)
             cfg = l.layer_config(user)
             src_cfg = l.source_config();
             source = source_lookup(src_cfg)
@@ -1679,7 +1750,9 @@ class Map(models.Model, PermissionLevelMixin):
 
         self.featured = conf['about'].get('featured', False)
 
-        self.group_params = simplejson.dumps(conf["treeconfig"])
+        logger.info("Try to save treeconfig")
+        self.group_params = simplejson.dumps(conf['treeconfig'])
+        logger.info("Saved treeconfig")
 
         def source_for(layer):
             return conf["sources"][layer["source"]]
@@ -1694,7 +1767,10 @@ class Map(models.Model, PermissionLevelMixin):
                 self.layer_set.from_viewer_config(
                     self, layer, source_for(layer), ordering
             ))
+        logger.info("About to save")
         self.save()
+        cache.delete('maplayerset_' + str(self.id))
+        logger.info("Saved")
 
     def get_absolute_url(self):
         return '/maps/%i' % self.id
@@ -1755,6 +1831,9 @@ class MapSnapshot(models.Model):
                 "user": self.user.username if self.user else None,
                 "url": num_encode(self.id)
         }
+
+
+
 
 class SocialExplorerLocation(models.Model):
     map = models.ForeignKey(Map, related_name="jump_set")
@@ -1915,7 +1994,12 @@ class MapLayer(models.Model):
         but we try to err on the side of false negatives.
         """
         if self.ows_url == (settings.GEOSERVER_BASE_URL + "wms"):
-            return Layer.objects.filter(typename=self.name).count() != 0
+            isLocal = cache.get('islocal_' + self.name)
+            if isLocal is None:
+                logger.debug('isLocal_%s is None', self.name)
+                isLocal = Layer.objects.filter(typename=self.name).count() != 0
+                cache.add('islocal_' + self.name, isLocal)
+            return isLocal
         else:
             return False
 
@@ -1927,6 +2011,9 @@ class MapLayer(models.Model):
         try:
             cfg = simplejson.loads(self.source_params)
         except:
+
+            #cfg = dict(ptype = "gxp_gnsource")
+
             cfg = dict(ptype="gxp_gnsource", restUrl="/gs/rest")
 
         if self.ows_url: cfg["url"] = self.ows_url
@@ -1943,6 +2030,13 @@ class MapLayer(models.Model):
         :method:`geonode.maps.models.Map.viewer_json` for an example of
         generating a full map configuration.
         """
+#       Caching of  maplayer config, per user (due to permissions)
+        if self.id is not None:
+            cfg = cache.get("maplayer_config_" + str(self.id) + "_" + str(0 if user is None else user.id))
+            if cfg is not None:
+                logger.debug("Cached cfg: %s", str(cfg))
+                return cfg
+
         try:
             cfg = simplejson.loads(self.layer_params)
         except:
@@ -1959,35 +2053,37 @@ class MapLayer(models.Model):
         if self.group: cfg["group"] = self.group
         cfg["visibility"] = self.visibility
 
-        logger.debug("TYPENAME:[%s]", self.name)
-        gnLayer = Layer.objects.filter(typename=self.name)
-        logger.debug("GN Layer Count:[%s]", gnLayer.count())
-        if gnLayer.count() == 1:
-            logger.debug("Get projection info for GeoNode layer")
-            if gnLayer[0].srs: cfg['srs'] = gnLayer[0].srs
-            if gnLayer[0].bbox: cfg['bbox'] = simplejson.loads(gnLayer[0].bbox)
-            if gnLayer[0].llbbox: cfg['llbbox'] = simplejson.loads(gnLayer[0].llbbox)
-            cfg['searchfields'] = (gnLayer[0].searchFields())
-            cfg['queryable'] = (gnLayer[0].storeType == 'dataStore'),
-            cfg['disabled'] = user and not user.has_perm('maps.view_layer', obj=gnLayer[0])
-            cfg['visibility'] = cfg['visibility'] and not cfg['disabled']
-            cfg['abstract'] = gnLayer[0].abstract
-            cfg['styles'] = self.styles
 
-#            if gnLayer[0].storeType == 'dataStore':
-#                if self.styles:
-#                    cfg['styles'].push(gnLayer[0].styles)
-#                else:
-#                    cfg['styles'] = gnLayer[0].styles
-#                if gnLayer[0].styles:
-#                    for style in gnLayer[0].styles:
-#                        cfg['styles'].push(style)
-#                logger.debug('STYLES: [%s]', str(cfg['styles']))
+        if self.source_params.find( "gxp_gnsource") > -1:
+            try:
+                gnLayer = Layer.objects.get(typename=self.name)
+                if gnLayer.srs: cfg['srs'] = gnLayer.srs
+                if gnLayer.bbox: cfg['bbox'] = simplejson.loads(gnLayer.bbox)
+                if gnLayer.llbbox: cfg['llbbox'] = simplejson.loads(gnLayer.llbbox)
+                cfg['attributes'] = (gnLayer.layer_attributes())
+                cfg['queryable'] = (gnLayer.storeType == 'dataStore'),
+                cfg['disabled'] =  not user.has_perm('maps.view_layer', obj=gnLayer)
+                cfg['visibility'] = cfg['visibility'] and not cfg['disabled']
+                cfg['abstract'] = gnLayer.abstract
+                cfg['styles'] = self.styles
+            except Exception, e:
+                # Give it some default values so it will still show up on the map, but disable it in the layer tree
+                cfg['srs'] = 'EPSG:900913'
+                cfg['llbbox'] = [-180,-90,180,90]
+                cfg['attributes'] = []
+                cfg['queryable'] =False,
+                cfg['disabled'] = True
+                cfg['visibility'] = False
+                cfg['abstract'] = ''
+                cfg['styles'] =''
+                logger.error("Could not retrieve Layer with typename of %s : %s", self.name, str(e))
+
 
         cfg["fixed"] = self.fixed
 
-
-        logger.debug("layer config for [%s] is [%s]", self.name, str(cfg))
+        #Create cache of maplayer config that will last for 60 seconds (in case permissions or maplayer properties are changed)
+        if self.id is not None:
+            cache.set("maplayer_config_" + str(self.id) + "_" + str(0 if user is None else user.id), cfg, 60)
         return cfg
 
 
@@ -2090,3 +2186,20 @@ def post_save_layer(instance, sender, **kwargs):
 
 signals.pre_delete.connect(delete_layer, sender=Layer)
 signals.post_save.connect(post_save_layer, sender=Layer)
+
+
+
+#===================#
+#    NEW WORLDMAP MODELS      #
+#===================#
+
+class MapStats(models.Model):
+    map = models.ForeignKey(Map, unique=True)
+    visits = models.IntegerField(_("Visits"), default= 0)
+    uniques = models.IntegerField(_("Unique Visitors"), default = 0)
+
+class LayerStats(models.Model):
+    layer = models.ForeignKey(Layer, unique=True)
+    visits = models.IntegerField(_("Visits"), default = 0)
+    uniques = models.IntegerField(_("Unique Visitors"), default = 0)
+    downloads = models.IntegerField(_("Downloads"), default = 0)

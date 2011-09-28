@@ -1,5 +1,5 @@
 from geonode.core.models import AUTHENTICATED_USERS, ANONYMOUS_USERS, CUSTOM_GROUP_USERS
-from geonode.maps.models import Map, Layer, MapLayer, LayerCategory, LayerAttribute, Contact, ContactRole, Role, get_csw, MapSnapshot, CHARSETS
+from geonode.maps.models import Map, Layer, MapLayer, LayerCategory, LayerAttribute, Contact, ContactRole, Role, get_csw, MapSnapshot, MapStats, LayerStats, CHARSETS
 from geonode.maps.gs_helpers import fixup_style, cascading_delete, delete_from_postgis
 from geonode.maps.encode import num_encode, num_decode
 import geoserver
@@ -41,6 +41,8 @@ from django.core.mail import send_mail
 from django.template.loader import render_to_string
 from django.contrib.sites.models import Site
 from datetime import datetime, timedelta
+from django.core.cache import cache
+
 
 logger = logging.getLogger("geonode.maps.views")
 
@@ -128,7 +130,7 @@ class LayerAttributeForm(forms.ModelForm):
             self.fields['searchable'].widget.attrs['disabled'] = True
         self.fields['attribute'].widget.attrs['readonly'] = True
         self.fields['display_order'].widget.attrs['size'] = 3
-        self.fields['display_order'].widget.attrs['size'] = 3
+
 
 
     class Meta:
@@ -269,7 +271,7 @@ def mapJSON(request, mapid):
                 status=400
             )
 
-@login_required
+
 def newmap_config(request):
     '''
     View that creates a new map.
@@ -362,18 +364,21 @@ def newmap_config(request):
         else:
             config = DEFAULT_MAP_CONFIG
         config['edit_map'] = True
-    return json.dumps(config)
 
-@csrf_exempt            
+        return json.dumps(config)
+
+@login_required
+@csrf_exempt
 def newmap(request):
     config = newmap_config(request);
     if isinstance(config, HttpResponse):
         return config;
     else:
         return render_to_response('maps/view.html', RequestContext(request, {
-            'config': config, 
+            'config': config,
             'GOOGLE_API_KEY' : settings.GOOGLE_API_KEY,
-            'GEOSERVER_BASE_URL' : settings.GEOSERVER_BASE_URL
+            'GEOSERVER_BASE_URL' : settings.GEOSERVER_BASE_URL,
+            'maptitle': settings.SITENAME
         }))
 
 @csrf_exempt
@@ -574,7 +579,8 @@ def set_layer_permissions(layer, perm_spec, use_email = False):
             user = User.objects.get(username=username)
             layer.set_user_level(user, level)
     # Always make sure owner keeps control
-    layer.set_user_level(layer.owner, layer.LEVEL_ADMIN)
+    if layer.owner is not None:
+        layer.set_user_level(layer.owner, layer.LEVEL_ADMIN)
 
 def set_map_permissions(m, perm_spec, use_email = False):
     if "authenticated" in perm_spec:
@@ -745,7 +751,7 @@ def _send_permissions_email(user_email, map_layer_title, map_layer_url, map_laye
                          'username': user.username,
                          'password' : password })
 
-    send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [user.email])
+    send_mail(subject, message, settings.NO_REPLY_EMAIL, [user.email])
 
 @login_required
 def deletemap(request, mapid):
@@ -802,13 +808,16 @@ def mapdetail(request,mapid):
             RequestContext(request, {'error_message':
                 _("You are not allowed to view this map.")})), status=401)
 
+
     config = map.viewer_json(request.user)
     config = json.dumps(config)
     layers = MapLayer.objects.filter(map=map.id)
+    mapstats, created = MapStats.objects.get_or_create(map=map)
     return render_to_response("maps/mapinfo.html", RequestContext(request, {
         'config': config,
         'map': map,
         'layers': layers,
+        'mapstats': mapstats,
         'permissions_json': _perms_info_email_json(map, MAP_LEV_NAMES),
         'customGroup': settings.CUSTOM_GROUP_NAME if settings.USE_CUSTOM_ORG_AUTHORIZATION else '',
         'urlsuffix':get_suffix_if_custom(map)
@@ -820,6 +829,9 @@ def map_share(request,mapid):
     The view that shows map permissions in a window from map
     '''
     map = get_object_or_404(Map,pk=mapid)
+    mapstats,created = MapStats.objects.get_or_create(map=map)
+
+
     if not request.user.has_perm('maps.view_map', obj=map):
         return HttpResponse(loader.render_to_string('401.html',
             RequestContext(request, {'error_message':
@@ -828,6 +840,7 @@ def map_share(request,mapid):
 
     return render_to_response("maps/mapinfopanel.html", RequestContext(request, {
         "map": map,
+        "mapstats": mapstats,
         'permissions_json': _perms_info_email_json(map, MAP_LEV_NAMES),
         'customGroup': settings.CUSTOM_GROUP_NAME if settings.USE_CUSTOM_ORG_AUTHORIZATION else '',
     }))
@@ -945,14 +958,18 @@ def view(request, mapid, snapshot=None):
     else:
         request.session['visit' + str(map.id)] = True
 
+    mapstats, created = MapStats.objects.get_or_create(map=map)
+    mapstats.visits += 1
+    if created or first_visit:
+            mapstats.uniques+=1
+    mapstats.save()
+
     #Remember last visited map
     request.session['lastmap'] = map.id
     request.session['lastmapTitle'] = map.title
 
     config['first_visit'] = first_visit
     config['edit_map'] = request.user.has_perm('maps.change_map', obj=map)
-    logger.debug("CONFIG: [%s]", str(config))
-
 
     return render_to_response('maps/view.html', RequestContext(request, {
         'config': json.dumps(config),
@@ -1029,7 +1046,7 @@ def _describe_layer(request, layer):
         metadata_author = layer.metadata_author
         poc_role = ContactRole.objects.get(layer=layer, role=layer.poc_role)
         metadata_author_role = ContactRole.objects.get(layer=layer, role=layer.metadata_author_role)
-        layerAttSet = inlineformset_factory(Layer, LayerAttribute, extra=0, form=LayerAttributeForm)
+        layerAttSet = inlineformset_factory(Layer, LayerAttribute, extra=0, form=LayerAttributeForm, )
 
 
         if request.method == "GET":
@@ -1057,8 +1074,12 @@ def _describe_layer(request, layer):
                         la = LayerAttribute.objects.get(id=int(form['id'].id))
                         la.attribute_label = form["attribute_label"]
                         la.searchable = form["searchable"]
+                        la.visible = form["visible"]
                         la.display_order = form["display_order"]
                         la.save()
+                    cache.delete('layer_searchfields_' + layer.typename)
+                    logger.debug("Deleted cache for layer_searchfields_" + layer.typename)
+
 
 
                 new_poc = layer_form.cleaned_data['poc']
@@ -1088,6 +1109,7 @@ def _describe_layer(request, layer):
                     logger.debug("About to save")
                     the_layer.save()
                     logger.debug("Saved")
+
 
 
                 if request.is_ajax():
@@ -1240,14 +1262,17 @@ def layerController(request, layername):
 
         metadata = layer.metadata_csw()
 
-        maplayer = MapLayer(name = layer.typename, styles=[layer.default_style.name], ows_url = settings.GEOSERVER_BASE_URL + "wms",  layer_params= '{"tiled":true, "title":" '+ layer.title + '"}')
+        maplayer = MapLayer(name = layer.typename, styles=[layer.default_style.name], source_params = '{"ptype": "gxp_gnsource"}', ows_url = settings.GEOSERVER_BASE_URL + "wms",  layer_params= '{"tiled":true, "title":" '+ layer.title + '"}')
 
         # center/zoom don't matter; the viewer will center on the layer bounds
         map = Map(projection="EPSG:900913")
 
+        layerstats,created = LayerStats.objects.get_or_create(layer=layer)
+
         return render_to_response('maps/layer.html', RequestContext(request, {
             "layer": layer,
             "metadata": metadata,
+            "layerstats": layerstats,
             "viewer": json.dumps(map.viewer_json(request.user, * (DEFAULT_BASE_LAYERS + [maplayer]))),
             "permissions_json": _perms_info_email_json(layer, LAYER_LEV_NAMES),
             "customGroup": settings.CUSTOM_GROUP_NAME if settings.USE_CUSTOM_ORG_AUTHORIZATION else '',
@@ -1302,13 +1327,15 @@ def upload_layer(request):
                     iter = 1
                     mark_searchable = True
                     for field, ftype in saved_layer.attribute_names.iteritems():
-                        if re.search('geom|oid|objectid|gid', field, flags=re.I) is None:
                             logger.debug("Field is [%s]", field)
-                            la = LayerAttribute.objects.create(layer=saved_layer, attribute=field, attribute_label=field.title(), attribute_type=ftype, searchable=(ftype == "xsd:string" and mark_searchable), display_order = iter)
-                            la.save()
+                            la = LayerAttribute.objects.create(layer=saved_layer, attribute=field, attribute_label=field.title(), attribute_type=ftype, searchable=(ftype == "xsd:string" and mark_searchable))
+                            if la.attribute_type.find("gsm:") != 0:
+                                la.display_order = iter
+                                la.save()
+                                iter +=1
                             if la.searchable:
                                 mark_searchable = False
-                            iter+=1
+
                 else:
                     logger.debug("No attributes found")
 
@@ -1367,7 +1394,8 @@ def _updateLayer(request, layer):
 
                 try:
                     #Delete layer attributes if they no longer exist in an updated layer
-                    for la in LayerAttribute.objects.filter(layer=saved_layer):
+                    attributes = LayerAttribute.objects.filter(layer=saved_layer)
+                    for la in attributes:
                         lafound = False
                         if layer.attribute_names is not None:
                             for field, ftype in saved_layer.attribute_names.iteritems():
@@ -2393,3 +2421,28 @@ def snapshot_config(snapshot, map, user):
     return config
 
 
+@csrf_exempt
+def ajax_increment_layer_stats(request):
+    if request.method != 'POST':
+        return HttpResponse(
+            content='ajax user lookup requires HTTP POST',
+            status=405,
+            mimetype='text/plain'
+        )
+    if request.POST['layername'] != '':
+        layer_match = Layer.objects.filter(typename=request.POST['layername'])[:1]
+        for l in layer_match:
+            layerStats,created = LayerStats.objects.get_or_create(layer=l)
+            layerStats.visits += 1
+            first_visit = True
+            if request.session.get('visitlayer' + str(l.id), False):
+                first_visit = False
+            else:
+                request.session['visitlayer' + str(l.id)] = True
+            if first_visit or created:
+                layerStats.uniques += 1
+            layerStats.save()
+
+    return HttpResponse(
+                            status=200
+    )

@@ -4,14 +4,12 @@ from staticfiles.urls import staticfiles_urlpatterns
 from geonode.sitemap import LayerSitemap, MapSitemap
 from geonode.proxy.urls import urlpatterns as proxy_urlpatterns
 
-
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
 
 js_info_dict = {
-    'domain': 'djangojs',
-    'packages': ('geonode',)
+    'packages': ('geonode.maps',),
 }
 
 sitemaps = {
@@ -23,13 +21,10 @@ urlpatterns = patterns('',
     # Example:
     # (r'^geonode/', include('geonode.foo.urls')),
     (r'^(?:index/?)?$', 'geonode.views.index'),
-    (r'^(?P<page>developer|help|maphelp|about)/?$', 'geonode.views.static'),
+    (r'^(?P<page>developer|help|maphelp|about|maps\/upload_terms)/?$', 'geonode.views.static'),
     url(r'^lang\.js$', 'django.views.generic.simple.direct_to_template',
                {'template': 'lang.js', 'mimetype': 'text/javascript'}, 'lang'),
     (r'^maps/', include('geonode.maps.urls')),
-    (r'^picasa/','geonode.proxy.views.picasa'),
-    (r'^youtube/','geonode.proxy.views.youtube'),
-    (r'^hglpoint/','geonode.proxy.views.hglpoints'),
     url(r'^data/$', 'geonode.maps.views.browse_data', name='data'),
     url(r'^data/acls/?$', 'geonode.maps.views.layer_acls', name='layer_acls'),
     url(r'^data/search/?$', 'geonode.maps.views.search_page', name='search'),
@@ -46,6 +41,7 @@ urlpatterns = patterns('',
     (r'^data/(?P<layername>[^/]*)/ajax-permissions$', 'geonode.maps.views.ajax_layer_permissions'),
     (r'^data/(?P<layername>[^/]*)/ajax-permissions-email$', 'geonode.maps.views.ajax_layer_permissions_by_email'),
     (r'^data/(?P<layername>[^/]*)/ajax_layer_edit_check/?$', 'geonode.maps.views.ajax_layer_edit_check'),
+    (r'^data/layerstats/?$', 'geonode.maps.views.ajax_increment_layer_stats'),
     (r'^admin/', include(admin.site.urls)),
     (r'^i18n/', include('django.conf.urls.i18n')),
     (r'^jsi18n/$', 'django.views.i18n.javascript_catalog', js_info_dict),
@@ -58,19 +54,20 @@ urlpatterns = patterns('',
     (r'^avatar/', include('avatar.urls')),
     (r'^accounts/', include('geonode.accountforms.urls')),  
     (r'^profiles/', include('geonode.profileforms.urls')),
-    (r'^(?P<site>\w+)/$', 'geonode.maps.views.official_site'),
-    (r'^(?P<site>\w+)/edit$', 'geonode.maps.views.official_site_controller'),
     (r'^accounts/', include('registration.urls')),
     (r'^profiles/', include('profiles.urls')),
     (r'^sitemap\.xml$', 'django.contrib.sitemaps.views.sitemap', {'sitemaps': sitemaps}),
+    (r'^download/(?P<service>[^/]*)/(?P<layer>[^/]*)/?$','geonode.proxy.views.download'),
     )
 
 urlpatterns += proxy_urlpatterns
 
+urlpatterns += patterns('',
+    (r'^(?P<site>\w+)/$', 'geonode.maps.views.official_site'),
+    (r'^(?P<site>\w+)/edit$', 'geonode.maps.views.official_site_controller'),
+)
+
 # Extra static file endpoint for development use
 if settings.SERVE_MEDIA:
     urlpatterns += staticfiles_urlpatterns()
-    urlpatterns += patterns(
-        url(r'^site_media/media/(?P<path>.*)$', 'django.views.static.serve', {
-            'document_root': settings.MEDIA_ROOT,
-        }))
+
