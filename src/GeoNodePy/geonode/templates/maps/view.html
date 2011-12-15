@@ -7,7 +7,7 @@
 {% include "geonode/ext_header.html" %}
 {% include "geonode/app_header.html" %}
 {% include "geonode/geo_header.html" %}
-
+<script type="text/javascript" src="{{ GEONODE_CLIENT_LOCATION }}externals/misc/nicEdit.js"></script>
 <script src="http://www.google.com/jsapi?key={{GOOGLE_API_KEY}}"></script>
 <script type="text/javascript">
     google.load("earth", "1");
@@ -27,9 +27,20 @@
 
 <script type="text/javascript">
 var app;
-Ext.onReady(function() {
+var init = function() {
 {% autoescape off %}
     var config = Ext.apply({
+        tools:  [{
+                    ptype: "gxp_geonodequerytool",
+                    id: "worldmap_query_tool",
+                    actionTarget:  {target: "paneltbar", index: 5},
+                    toolText: '<span class="x-btn-text">Identify</span>',
+                    iconCls: null,
+                    outputConfig: {width: 400, height: 200, panIn: false},
+                    featurePanel: 'queryPanel',
+                    attributePanel: 'gridWinPanel',
+                    toggleGroup: 'featureGroup'
+                }],
         proxy: "/proxy/?url=",
 
         /* The URL to a REST map configuration service.  This service
@@ -41,15 +52,7 @@ Ext.onReady(function() {
         siteUrl: "{{ SITE_URL }}",
         localGeoServerBaseUrl: "{{ GEOSERVER_BASE_URL }}",
         csrfToken: "{{ csrf_token }}",
-        tools:  [{
-                    ptype: "gxp_geonodequerytool",
-                    actionTarget:  {target: "paneltbar", index: 4},
-                    toolText: '<span class="x-btn-text">Identify</span>',
-                    iconCls: null,
-                    outputConfig: {width: 400, height: 200, panIn: false},
-                    featurePanel: 'queryPanel',
-                    attributePanel: 'gridWinPanel'
-                }]
+        authorizedRoles: "{{ user.is_authenticated|yesno:"ROLE_ADMINISTRATOR,ROLE_ANONYMOUS" }}"
     }, {{ config }});
 
 
@@ -78,7 +81,10 @@ Ext.onReady(function() {
 
     }, this);
 {% endautoescape %}
-});
+}
+
+window.onload = init;
+
 </script>
 
 {% endblock %}
@@ -128,6 +134,7 @@ Ext.onReady(function() {
 </div>
         <div id="externalDiv"></div>
         <div id="uploadDiv"></div>
+        <div id="createDiv"></div>
     </div>
 
 </div>

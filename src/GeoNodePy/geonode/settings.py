@@ -219,7 +219,7 @@ MAP_BASELAYERSOURCES = {
 
 MAP_BASELAYERS = [
 {
-    "source":"any",
+    "source": {"ptype": "gx_olsource"},
     "type":"OpenLayers.Layer",
     "args":["No background"],
     "visibility": True,
@@ -227,31 +227,31 @@ MAP_BASELAYERS = [
     "group":"background"
   },
  {
-    "source":"google",
+    "source": {"ptype": "gx_googlesource"},
     "group":"background",
     "name":"SATELLITE",
     "visibility": False,
     "fixed": True,
 },{
-    "source":"google",
+    "source": {"ptype": "gx_googlesource"},
     "group":"background",
     "name":"TERRAIN",
     "visibility": True,
     "fixed": True,
 },            {
-    "source":"google",
+    "source": {"ptype": "gx_googlesource"},
     "group":"background",
     "name":"ROADMAP",
     "visibility": False,
     "fixed": True,
 },{
-    "source":"google",
+    "source": {"ptype": "gx_googlesource"},
     "group":"background",
     "name":"HYBRID",
     "visibility": False,
     "fixed": True,
 },{
-    "source":"any",
+    "source": {"ptype": "gx_olsource"},
     "type":"OpenLayers.Layer.OSM",
     "args":["OpenStreetMap"],
     "visibility": False,
@@ -300,9 +300,10 @@ INSTALLED_APPS = (
     'geonode.core',
     'geonode.maps',
     'geonode.proxy',
+    'geonode',
     'geonode.accountforms',
     'geonode.profileforms',
-    'geonode'
+    #'debug_toolbar',
 )
 
 def get_user_url(u):
@@ -352,7 +353,7 @@ DB_DATASTORE_HOST = ''
 DB_DATASTORE_PORT = ''
 DB_DATASTORE_TYPE=''
 
-
+HGL_VALIDATION_KEY='Contact Harvard Geospatial Library to request the validation key'
 CACHE_BACKEND = 'dummy://'
 
 try:

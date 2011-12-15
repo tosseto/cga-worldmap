@@ -4,12 +4,14 @@ from staticfiles.urls import staticfiles_urlpatterns
 from geonode.sitemap import LayerSitemap, MapSitemap
 from geonode.proxy.urls import urlpatterns as proxy_urlpatterns
 
+
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
 
 js_info_dict = {
-    'packages': ('geonode.maps',),
+    'domain': 'djangojs',
+    'packages': ('geonode',)
 }
 
 sitemaps = {
@@ -36,11 +38,13 @@ urlpatterns = patterns('',
     url(r'^data/api/batch_permissions/?$', 'geonode.maps.views.batch_permissions'),
     url(r'^data/api/batch_permissions_by_email/?$', 'geonode.maps.views.batch_permissions_by_email'),
     url(r'^data/api/batch_delete/?$', 'geonode.maps.views.batch_delete'),
+    url(r'^data/create_pg_layer', 'geonode.maps.views.create_pg_layer', name='create_pg_layer'),
     (r'^data/download$', 'geonode.maps.views.batch_layer_download'),
     (r'^data/(?P<layername>[^/]*)$', 'geonode.maps.views.layerController'),
     (r'^data/(?P<layername>[^/]*)/ajax-permissions$', 'geonode.maps.views.ajax_layer_permissions'),
     (r'^data/(?P<layername>[^/]*)/ajax-permissions-email$', 'geonode.maps.views.ajax_layer_permissions_by_email'),
     (r'^data/(?P<layername>[^/]*)/ajax_layer_edit_check/?$', 'geonode.maps.views.ajax_layer_edit_check'),
+    (r'^data/(?P<layername>[^/]*)/ajax_layer_update_bounds/?$', 'geonode.maps.views.ajax_layer_update_bounds'),
     (r'^data/layerstats/?$', 'geonode.maps.views.ajax_increment_layer_stats'),
     (r'^admin/', include(admin.site.urls)),
     (r'^i18n/', include('django.conf.urls.i18n')),
@@ -62,12 +66,18 @@ urlpatterns = patterns('',
 
 urlpatterns += proxy_urlpatterns
 
-urlpatterns += patterns('',
+
+official_site_url_patterns = patterns('',
     (r'^(?P<site>\w+)/$', 'geonode.maps.views.official_site'),
     (r'^(?P<site>\w+)/edit$', 'geonode.maps.views.official_site_controller'),
 )
 
+urlpatterns += official_site_url_patterns
+
 # Extra static file endpoint for development use
 if settings.SERVE_MEDIA:
     urlpatterns += staticfiles_urlpatterns()
-
+    urlpatterns += patterns(
+        url(r'^site_media/media/(?P<path>.*)$', 'django.views.static.serve', {
+            'document_root': settings.MEDIA_ROOT,
+        }))

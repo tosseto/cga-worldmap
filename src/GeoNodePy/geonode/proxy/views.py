@@ -6,12 +6,16 @@ import urllib
 import simplejson
 from django.conf import settings
 from django.contrib.auth.decorators import login_required
+from django.utils.html import escape
 from django.views.decorators.csrf import csrf_exempt
 import logging
+import urlparse
 from geonode.maps.models import LayerStats
-
+import re
 
 logger = logging.getLogger("geonode.proxy.views")
+
+HGL_URL = 'http://hgl.harvard.edu:8080/HGL'
 
 @csrf_exempt
 def proxy(request):
@@ -77,6 +81,7 @@ def geoserver_rest_proxy(request, proxy_path, downstream_path):
         status=response.status,
         mimetype=response.get("content-type", "text/plain"))
 
+
 def picasa(request):
     url = "http://picasaweb.google.com/data/feed/base/all?thumbsize=160c&"
     kind = request.GET['KIND'] if request.method == 'GET' else request.POST['KIND']
@@ -95,19 +100,36 @@ def picasa(request):
     return HttpResponse(feed_response, mimetype="text/xml")
 
 def hglpoints (request):
-    url = "http://pynchon.hul.harvard.edu:8080/HGL/HGLGeoRSS?GeometryType=point"
+    from xml.dom import minidom
+    import re
+    url = HGL_URL + "/HGLGeoRSS?GeometryType=point"
+    #bbox = request.GET['BBOX'] if request.method == 'GET' else request.POST['BBOX']
     query = request.GET['Q'] if request.method == 'GET' else request.POST['Q']
-#    bbox = request.GET['BBOX'] if request.method == 'GET' else request.POST['BBOX']
-#    coords = bbox.split(",")
-#    coords[0] = -180 if float(coords[0]) <= -180 else coords[0]
-#    coords[2] = 180 if float(coords[2])  >= 180 else coords[2]
-#    coords[1] = coords[1] if float(coords[1]) > -90 else -90
-#    coords[3] = coords[3] if float(coords[3])  < 90 else 90
-#    newbbox = str(coords[0]) + ',' + str(coords[1]) + ',' + str(coords[2]) + ',' + str(coords[3])
-    url = url + "&UserQuery=" + query  #+ "&BBSearchOption=" + newbbox
-    logger.debug("HGL URL: %s", url)
-    feed_response = urllib.urlopen(url).read()
-    return HttpResponse(feed_response, mimetype="text/xml")
+    url = url + "&UserQuery=" + query
+    dom = minidom.parse(urllib.urlopen(url))
+    for node in dom.getElementsByTagName('item'):
+        description = node.getElementsByTagName('description')[0]
+        guid = node.getElementsByTagName('guid')[0]
+        title = node.getElementsByTagName('title')[0]
+        if guid.firstChild.data != 'OWNER.TABLE_NAME':
+            description.firstChild.data = description.firstChild.data + '<br/><br/><p><a href=\'javascript:void(0);\' onClick=\'app.addHGL("' \
+                + escape(title.firstChild.data) + '","' + re.sub("SDE\d?\.","", guid.firstChild.data)  + '");\'>Add to Map</a></p>'
+    return HttpResponse(dom.toxml(), mimetype="text/xml")
+
+
+def hglServiceStarter (request, layer):
+    #Check if the layer is accessible to public, if not return 403
+    accessUrl = HGL_URL + "/ogpHglLayerInfo.jsp?ValidationKey=" + settings.HGL_VALIDATION_KEY +"&layers=" + layer
+    accessJSON = simplejson.loads(urllib.urlopen(accessUrl).read())
+    if accessJSON[layer]['access'] == 'R':
+        return HttpResponse(status=403)
+
+    #Call the RemoteServiceStarter to load the layer into HGL's Geoserver in case it's not already there
+    startUrl = HGL_URL + "/RemoteServiceStarter?ValidationKey=" + settings.HGL_VALIDATION_KEY + "&AddLayer=" + layer
+    return HttpResponse(urllib.urlopen(startUrl).read())
+
+
+
 
 def youtube(request):
     url = "http://gdata.youtube.com/feeds/api/videos?v=2&prettyprint=true&"
@@ -141,7 +163,7 @@ def download(request, service, layer):
 
     params = request.GET
     #mimetype = params.get("outputFormat") if service == "wfs" else params.get("format")
-    
+
     service=service.replace("_","/")
     url = settings.GEOSERVER_BASE_URL + service + "?" + params.urlencode()
     download_response = urllib.urlopen(url)
@@ -152,3 +174,5 @@ def download(request, service, layer):
     response = HttpResponse(content, mimetype = mimetype)
     if content_disposition is not None:
         response['Content-Disposition'] = content_disposition
+
+    return response

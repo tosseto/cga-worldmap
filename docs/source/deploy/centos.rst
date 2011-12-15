@@ -7,24 +7,15 @@ distribution.
 
 .. note::
 
-    While we intend to provide a detailed, accurate explanation of the
-    installation process, it may become out of date.  If you run into problems
-    with the process described in this document, please don't hesitate to let
-    the GeoNode team know so we can keep it up to date.
+   This documentation still needs updating for GeoNode 1.1!
+   If you are interested in helping out with the CentOS installation process please ask about it on the development mailing list.
+
 
 .. note::
 
-<<<<<<< HEAD
-    Disabling SELinux http://www.centos.org/docs/5/html/5.2/Deployment_Guide/sec-sel-enable-disable.html
-=======
     SELinux is known to cause issues with the Apache proxy configuration used by GeoNode. Altering its configuration is beyond the scope of this document.
     
     Instructions for disabling SELinux http://www.centos.org/docs/5/html/5.2/Deployment_Guide/sec-sel-enable-disable.html
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
 
 The stack used is:
 
@@ -78,23 +69,11 @@ Install Dependencies
 
 2. Install Java Runtime
 
-<<<<<<< HEAD
-     You will need a Java Runtime Environment (JRE).  We recommend following
-     the `Oracle installation instructions
-     <http://www.oracle.com/technetwork/java/javase/downloads/index.html>`_
-     While other JRE versions will work, Oracle's is recommended for performance
-     reasons.
-=======
    You will need a Java Runtime Environment (JRE).  We recommend following
    the `Oracle installation instructions
    <http://www.oracle.com/technetwork/java/javase/downloads/index.html>`_
    While other JRE versions will work, Oracle's is recommended for performance
-   reasons.  
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
+   reasons.
 
 3. Install Dependencies with yum::
 
@@ -524,17 +503,6 @@ Tomcat Servlet container was already installed with yum in previous step
    Edit the file :file:`/etc/sysconfig/tomcat5` and add the following.::
 
     JAVA_OPTS="-Xmx1024m -XX:MaxPermSize=256m -XX:CompileCommand=exclude,net/sf/saxon/event/ReceivingContentHandler.startElement"
-<<<<<<< HEAD
-
-    .. note::
-
-      The Java options used are as follows:
-      * ``-Xmx1024m`` tells Java to use 1GB of RAM instead of the default value
-      * ``-XX:MaxPermSize=256M`` increase the amount of space used for
-        "permgen", needed to run geonetwork/geoserver.
-      * ``-XX:CompileCommand=...`` is a workaround for a JVM bug that affects
-        GeoNetwork; see http://trac.osgeo.org/geonetwork/ticket/301
-=======
   
    .. note::
  
@@ -545,11 +513,6 @@ Tomcat Servlet container was already installed with yum in previous step
      * ``-XX:MaxPermSize=256M`` increase the amount of space used for "permgen", needed to run geonetwork/geoserver.
 
      * ``-XX:CompileCommand=...`` is a workaround for a JVM bug that affect GeoNetwork; see http://trac.osgeo.org/geonetwork/ticket/301
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
 
 2. Set tomcat to start on boot::
 
@@ -601,15 +564,7 @@ Deploying GeoServer
    default, it will look for GeoNode at http://localhost:8000/ but we will be
    running the Django application on http://localhost:80/ so we have to
    configure GeoServer to look at that URL.  To do so, edit
-<<<<<<< HEAD
-   :file:`/var/lib/tomcat5/webapps/geoserver-geonode-dev/WEB-INF/web.xml`
-=======
-   :file:`/var/lib/tomcat5/webapps/geoserver/WEB-INF/web.xml` 
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
+   :file:`/var/lib/tomcat5/webapps/geoserver/WEB-INF/web.xml`
    and add a context-parameter::
 
      <context-param>
@@ -625,19 +580,9 @@ Deploying GeoServer
 
 3. Move the GeoServer "data directory" outside of the servlet container to
    avoid having it overwritten on later upgrades. Edit the file
-<<<<<<< HEAD
-   :file`/var/lib/tomcat5/webapps/geoserver-geonode-dev/WEB-INF/web.xml`
-   by uncommenting the block below and setting the param-value to
-   /opt/geoserver_data::
-=======
    :file:`/var/lib/tomcat5/webapps/geoserver/WEB-INF/web.xml`
    by uncommenting the block below and setting the param-value to 
    ``/opt/geoserver_data``::
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
 
      <context-param>
         <param-name>GEOSERVER_DATA_DIR</param-name>
@@ -646,17 +591,8 @@ Deploying GeoServer
 
 4. GeoServer requires a particular directory structure in data directories, so
    also copy the template datadir from the tomcat webapps directory::
-<<<<<<< HEAD
-
-     $ cp -rp /var/lib/tomcat5/webapps/geoserver-geonode-dev/data/* /opt/geoserver_data/.
-=======
    
      $ cp -rp /var/lib/tomcat5/webapps/geoserver/data/* /opt/geoserver_data/.
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
      $ chown tomcat. /opt/geoserver_data/ -R
 
 4. After modifying ``web.xml`` you will need to restart Tomcat for changes to
@@ -665,17 +601,8 @@ Deploying GeoServer
      $ service tomcat5 restart
 
 5. You should now be able to visit the GeoServer web interface at
-<<<<<<< HEAD
-   http://localhost:8080/geoserver-geonode-dev/ .
-
-=======
    http://localhost:8080/geoserver/ . 
    
-<<<<<<< HEAD
->>>>>>> 4d946a76b641dcfad2b9e925e0175624fd979a13
-=======
->>>>>>> gncore/synth
->>>>>>> synthmerge
 .. note::
 
      GeoServer is configured to use the Django database for authentication,

@@ -1,10 +1,8 @@
 from django.conf.urls.defaults import *
 
-
 js_info_dict = {
     'packages': ('geonode.maps',),
 }
-
 
 urlpatterns = patterns('geonode.maps.views',
     (r'^$', 'maps'),
@@ -19,6 +17,7 @@ urlpatterns = patterns('geonode.maps.views',
     (r'^history/(?P<mapid>\d+)/?$', 'ajax_snapshot_history'),
     (r'^embed/?$', 'embed'),
     (r'^(?P<mapid>[A-Za-z0-9_\-]+)/embed/?$', 'embed'),
+    (r'^(?P<mapid>[A-Za-z0-9_\-]+)/mobile/?$', 'mobilemap'),
     (r'^(?P<mapid>\d+)/data/?$', 'mapJSON'),
     (r'^addgeonodelayer/?$', 'addLayerJSON'),
     (r'^snapshot/create/?$', 'snapshot_create'),
@@ -29,5 +28,6 @@ urlpatterns = patterns('geonode.maps.views',
     url(r'^change-poc/(?P<ids>\w+)/?$', 'change_poc', name="change_poc"),
     (r'^(?P<mapid>[A-Za-z0-9_\-]+)/(?P<snapshot>\w+)/?$', 'view'),
     (r'^(?P<mapid>[A-Za-z0-9_\-]+)/(?P<snapshot>\w+)/embed/?$', 'embed'),
+    (r'^(?P<mapid>[A-Za-z0-9_\-]+)/(?P<snapshot>\w+)/mobile/?$', 'mobilemap'),
     (r'^(?P<mapid>[A-Za-z0-9_\-]+)/?$', 'view'),
 )
