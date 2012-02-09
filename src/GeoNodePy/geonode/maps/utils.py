@@ -35,6 +35,7 @@ from geoserver.resource import FeatureType, Coverage
 
 logger = logging.getLogger('geonode.maps.utils')
 _separator = '\n' + ('-' * 100) + '\n'
+import math
 
 
 class GeoNodeException(Exception):
@@ -288,13 +289,16 @@ def save(layer, base_file, user, overwrite = True, title=None,
     if the_layer_type == FeatureType.resource_type:
         logger.debug('Uploading vector layer: [%s]', base_file)
         if settings.DB_DATASTORE:
-            create_store = _create_db_featurestore
+            create_store_and_resource = _create_db_featurestore
         else:
-            create_store = cat.create_featurestore
-
+            def create_store_and_resource(name, data, overwrite):
+                ft = cat.create_featurestore(name, data, overwrite=overwrite)
+                return cat.get_store(name), cat.get_resource(name)
     elif the_layer_type == Coverage.resource_type:
         logger.debug("Uploading raster layer: [%s]", base_file)
-        create_store = cat.create_coveragestore
+        def create_store_and_resource(name, data, overwrite):
+            cat.create_coveragestore(name, data, overwrite=overwrite)
+            return cat.get_store(name), cat.get_resource(name)
     else:
         msg = ('The layer type for name %s is %s. It should be '
                '%s or %s,' % (layer_name,
@@ -320,7 +324,7 @@ def save(layer, base_file, user, overwrite = True, title=None,
     # ------------------
 
     try:
-        create_store(name, data, overwrite=overwrite)
+        store, gs_resource = create_store_and_resource(name, data, overwrite=overwrite)
     except geoserver.catalog.UploadError, e:
         msg = ('Could not save the layer %s, there was an upload '
                'error: %s' % (name, str(e)))
@@ -345,8 +349,6 @@ def save(layer, base_file, user, overwrite = True, title=None,
     # Step 5. Create the resource in GeoServer
     logger.info('>>> Step 5. Generating the metadata for [%s] after '
                 'successful import to GeoSever', name)
-    store = cat.get_store(name)
-    gs_resource = cat.get_resource(name=name, store=store)
 
     # Verify the resource was created
     if gs_resource is not None:
@@ -415,13 +417,13 @@ def save(layer, base_file, user, overwrite = True, title=None,
     defaults = dict(store=gs_resource.store.name,
                     storeType=gs_resource.store.resource_type,
                     typename=typename,
-                    workspace=gs_resource.store.workspace.name,
                     title=title or gs_resource.title,
                     uuid=layer_uuid,
                     keywords=' '.join(keywords),
                     abstract=abstract or gs_resource.abstract or '',
                     owner=user)
     saved_layer, created = Layer.objects.get_or_create(name=gs_resource.name,
+                                                       workspace=gs_resource.store.workspace.name,
                                                        defaults=defaults)
 
     if created:
@@ -666,23 +668,44 @@ def _create_db_featurestore(name, data, overwrite = False, charset = None):
     If the import into the database fails then delete the store
     (and delete the PostGIS table for it).
     """
-    cat = Layer.objects.gs_catalog
-    ds = cat.create_datastore(name)
-    ds.connection_parameters.update(host=settings.DB_DATASTORE_HOST,
-                                    port=settings.DB_DATASTORE_PORT,
-                                    database=settings.DB_DATASTORE_NAME,
-                                    user=settings.DB_DATASTORE_USER,
-                                    passwd=settings.DB_DATASTORE_PASSWORD,
-                                    dbtype=settings.DB_DATASTORE_TYPE)
-    cat.save(ds)
-    ds = cat.get_store(name)
     try:
-        cat.add_data_to_store(ds,name, data, overwrite, charset)
+        ds = cat.get_store(settings.DB_DATASTORE_NAME)
+    except FailedRequestError, e:
+        ds = cat.create_datastore(settings.DB_DATASTORE_NAME)
+        ds.connection_parameters.update(
+            host=settings.DB_DATASTORE_HOST,
+            port=settings.DB_DATASTORE_PORT,
+            database=settings.DB_DATASTORE_DATABASE,
+            user=settings.DB_DATASTORE_USER,
+            passwd=settings.DB_DATASTORE_PASSWORD,
+            dbtype=settings.DB_DATASTORE_TYPE)
+        cat.save(ds)
+        ds = cat.get_store(settings.DB_DATASTORE_NAME)
+
+    try:
+        cat.add_data_to_store(ds, name, data, overwrite, charset)
+        return ds, cat.get_resource(name, store=ds)
     except:
-        store_params = ds.connection_parameters
-        cat.delete(ds, purge=True)
-        if store_params['dbtype'] and store_params['dbtype'] == 'postgis':
-            delete_from_postgis(name)
+        delete_from_postgis(name)
         raise
 
+def forward_mercator(lonlat):
+    """
+        Given geographic coordinates, return a x,y tuple in spherical mercator.
+    """
+    x = lonlat[0] * 20037508.34 / 180
+    n = math.tan((90 + lonlat[1]) * math.pi / 360)
+    if n == 0:
+        y = float("-inf")
+    else:
+        y = math.log(n) / math.pi * 20037508.34
+    return (x, y)
 
+def inverse_mercator(xy):
+    """
+        Given coordinates in spherical mercator, return a lon,lat tuple.
+    """
+    lon = (xy[0] / 20037508.34) * 180
+    lat = (xy[1] / 20037508.34) * 180
+    lat = 180/math.pi * (2 * math.atan(math.exp(lat * math.pi / 180)) - math.pi / 2)
+    return (lon, lat)

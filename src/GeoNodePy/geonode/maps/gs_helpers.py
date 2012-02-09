@@ -1,7 +1,6 @@
 from itertools import cycle, izip
 import logging
 import re
-import psycopg2
 from django.conf import settings
 
 logger = logging.getLogger("geonode.maps.gs_helpers")
@@ -9,7 +8,7 @@ logger = logging.getLogger("geonode.maps.gs_helpers")
 _punc = re.compile(r"[\.:]") #regex for punctuation that confuses restconfig
 _foregrounds = ["#ffbbbb", "#bbffbb", "#bbbbff", "#ffffbb", "#bbffff", "#ffbbff"]
 _backgrounds = ["#880000", "#008800", "#000088", "#888800", "#008888", "#880088"]
-_marks = ["square", "circle", "star", "cross", "x", "triangle"]
+_marks = ["square", "circle", "cross", "x", "triangle"]
 _style_contexts = izip(cycle(_foregrounds), cycle(_backgrounds), cycle(_marks))
 
 def _add_sld_boilerplate(symbolizer):
@@ -49,6 +48,7 @@ _polygon_template = """
   </Fill>
   <Stroke>
     <CssParameter name="stroke">%(fg)s</CssParameter>
+    <CssParameter name="stroke-width">0.7</CssParameter>
   </Stroke>
 </PolygonSymbolizer>
 """
@@ -57,12 +57,16 @@ _line_template = """
 <LineSymbolizer>
   <Stroke>
     <CssParameter name="stroke">%(bg)s</CssParameter>
+    <CssParameter name="stroke-width">3</CssParameter>
   </Stroke>
 </LineSymbolizer>
+</Rule>
+</FeatureTypeStyle>
+<FeatureTypeStyle>
+<Rule>
 <LineSymbolizer>
   <Stroke>
     <CssParameter name="stroke">%(fg)s</CssParameter>
-    <CssParameter name="stroke-dasharray">2 2</CssParameter>
   </Stroke>
 </LineSymbolizer>
 """
@@ -153,7 +157,8 @@ def delete_from_postgis(resource_name):
     Delete a table from PostGIS (because Geoserver won't do it yet);
     to be used after deleting a layer from the system.
     """
-    conn=psycopg2.connect("dbname='" + settings.DB_DATASTORE_NAME + "' user='" + settings.DB_DATASTORE_USER + "'  password='" + settings.DB_DATASTORE_PASSWORD + "' port=" + settings.DB_DATASTORE_PORT + " host='" + settings.DB_DATASTORE_HOST + "'")
+    import psycopg2
+    conn=psycopg2.connect("dbname='" + settings.DB_DATASTORE_DATABASE + "' user='" + settings.DB_DATASTORE_USER + "'  password='" + settings.DB_DATASTORE_PASSWORD + "' port=" + settings.DB_DATASTORE_PORT + " host='" + settings.DB_DATASTORE_HOST + "'")
     try:
         cur = conn.cursor()
         cur.execute("SELECT DropGeometryTable ('%s')" %  resource_name)

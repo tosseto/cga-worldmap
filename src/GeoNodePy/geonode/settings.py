@@ -41,6 +41,8 @@ LANGUAGES = (
     ('es', 'Español'),
     ('it', 'Italiano'),
     ('fr', 'Français'),
+    ('el', 'Ελληνικά'),
+    ('id', 'Bahasa Indonesia'),
 )
 
 SITE_ID = 1
@@ -174,35 +176,28 @@ DEFAULT_MAP_CENTER = (-84.7, 12.8)
 # maximum zoom is between 12 and 15 (for Google Maps, coverage varies by area)
 DEFAULT_MAP_ZOOM = 7
 
-MAP_BASELAYERSOURCES = {
-    "any": {
-        "ptype":"gx_olsource"
-    },
-    "capra": {
-        "url":"/geoserver/wms"
-    },
-    "google":{
-        "ptype":"gx_googlesource",
-        "apiKey": GOOGLE_API_KEY
-    }
+DEFAULT_LAYER_SOURCE = {
+    "ptype":"gxp_wmscsource",
+    "url":"/geoserver/wms",
+    "restUrl": "/gs/rest"
 }
 
 MAP_BASELAYERS = [{
-    "source":"any",
+    "source": {"ptype": "gx_olsource"},
     "type":"OpenLayers.Layer",
     "args":["No background"],
     "visibility": False,
     "fixed": True,
     "group":"background"
   },{
-    "source":"any",
+    "source": { "ptype":"gx_olsource"},
     "type":"OpenLayers.Layer.OSM",
     "args":["OpenStreetMap"],
     "visibility": True,
     "fixed": True,
     "group":"background"
   },{
-    "source":"any",
+    "source": {"ptype":"gx_olsource"},
     "type":"OpenLayers.Layer.WMS",
     "group":"background",
     "visibility": False,
@@ -218,44 +213,8 @@ MAP_BASELAYERS = [{
       },
       {"buffer":0}
     ]
-  },{
-    "source":"google",
-    "group":"background",
-    "name":"SATELLITE",
-    "visibility": False,
-    "fixed": True,
-}]
 
-# NAVBAR expects a dict of dicts or a path to an ini file
-NAVBAR = \
-{'maps': {'id': '%sLink',
-               'item_class': '',
-               'link_class': '',
-               'text': 'Maps',
-               'url': 'geonode.maps.views.maps'},
- 'data': {'id': '%sLink',
-          'item_class': '',
-          'link_class': '',
-          'text': 'Data',
-          'url': "geonode.maps.views.browse_data"},
-#  'index': {'id': '%sLink',
-#            'item_class': '',
-#            'link_class': '',
-#            'text': 'Featured Map',
-#            'url': 'geonode.views.index'},
- 'master': {'id': '%sLink',
-            'item_class': '',
-            'link_class': '',
-            'text': 'This page has no tab for this navigation'},
- 'meta': {'active_class': 'here',
-          'default_id': '%sLink',
-          'default_item_class': '',
-          'default_link_class': '',
-          'end_class': 'last',
-          'id': '%sLink',
-          'item_class': '',
-          'link_class': '',
-          'visible': 'data\nmaps'}}
+}]
 
 INSTALLED_APPS = (
     'django.contrib.auth',
